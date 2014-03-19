@@ -2084,14 +2084,14 @@ def runPlots(outfilepath,sampleName):
 	fig5=plt.figure(5)
 	plot_snoRNAdetail(outfilepath,sampleName)
 	fig5.tight_layout()
-	fig5.savefig(outfilepath+'Figure4.png',format='png',bbox_inches='tight',dpi=150,pad_inches=0.5)
-	fig5.savefig(outfilepath+'Figure4.pdf',format='pdf',bbox_inches='tight',dpi=150,pad_inches=0.5)
+	fig5.savefig(outfilepath+'Figure5.png',format='png',bbox_inches='tight',dpi=150,pad_inches=0.5)
+	fig5.savefig(outfilepath+'Figure5.pdf',format='pdf',bbox_inches='tight',dpi=150,pad_inches=0.5)
 
 	fig6=plt.figure(6)
 	plot_ncRNAs(outfilepath,sampleName)
 	fig6.tight_layout()
-	fig6.savefig(outfilepath+'Figure5.png',format='png',bbox_inches='tight',dpi=150,pad_inches=0.5)
-	fig6.savefig(outfilepath+'Figure5.pdf',format='pdf',bbox_inches='tight',dpi=150,pad_inches=0.5)
+	fig6.savefig(outfilepath+'Figure6.png',format='png',bbox_inches='tight',dpi=150,pad_inches=0.5)
+	fig6.savefig(outfilepath+'Figure6.pdf',format='pdf',bbox_inches='tight',dpi=150,pad_inches=0.5)
 
 #############################################################################################################################
 
