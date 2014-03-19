@@ -209,7 +209,7 @@ def runBowtie(fastqFiles):
 	# Useage: Short read mapping to reference (hg19).
 	# Input: Fastq files of replicates (not paired end).
 	# Output: Path to samfile for each read.
-	program = '/home/vlaminck/tools/Bowtie2/bowtie2-2.0.2/bowtie2'
+	program = 'bowtie2'
 	mappedReads=[]
 	unMappedReads=[]
 	print "Performing Bowtie..."
