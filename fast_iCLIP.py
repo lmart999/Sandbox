@@ -634,21 +634,16 @@ def getLowFDRReadTypes(CLIPPERlowFDR,pathToGeneLists):
 	lowFDRgenelist=[]
 	try:
 		for path in pathToGeneLists:
+			
 			# File path to which low FDR reads of each type will be written
 			outfile=path+'_LowFDRreads.bed'
-			outfh = open(outfile, 'w')
-			# searchfile = open(CLIPPERlowFDR, 'r')
-			# Open the list of genes for each type
-			with open(path, 'r') as infile:
-				# For each gene, loopup the corresponding reads
-				for geneName in infile:	
-					# Grep it to the output 
-					store=grep(geneName.strip(), CLIPPERlowFDR)
-					# If NOT empty, then write to output
-					if store:				
-						outfh.write(''.join(store))
+
+			# Run file grep
+			print "Grep all reads for %s"%path
+			proc = subprocess.Popen('grep -F -f %s %s > %s'%(path,CLIPPERlowFDR,outfile),shell=True) # Run grep
+			return_code = proc.wait() # Wait for process to finish
 			lowFDRgenelist=lowFDRgenelist+[outfile]
-			outfh.close()
+
 		return lowFDRgenelist
 	except:
 		logOpen.write("Problem isolating low FDR reads by type.\n")

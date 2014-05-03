@@ -53,9 +53,11 @@ $ ipython fast_iCLIP.py <name>
 (2) The plots will, by defualt, be automatically generated.
 - This can be modified in the code by commenting out runPlots()
 (3) Plots and various -meta analysis are also included in the fast_iCLIP.ipynb ipython notebook.
-- If running on a remote cluster, VNCserver may be useful for accessing the notebook.
-- Alternativly, iPython web-based environment can be directed it to a specific port and used locally (link below).
+- iPython web-based environment can be directed it to a specific port and used locally (link below).
 - http://wisdomthroughknowledge.blogspot.com/2012/07/accessing-ipython-notebook-remotely.html
+- For example (from the directory with my notebooks on the cluster)
+(a) [lmartin@changrila CLIP]$ ipython notebook --no-browser --port=7000
+(b) ssh -N -f -L localhost:8889:localhost:7000 lmartin@changrila
 
 --- 
 
@@ -72,3 +74,8 @@ Debugging:
 (4) Any scrip in /bin 
 - The provided BedGraphToBigWig is built for Linux. 
 - This, and related scripts, may be downloaded for other platforms: http://hgdownload.cse.ucsc.edu/admin/exe/macOSX.i386/
+(5) Addition of a header to *mergedRT_CLIP_clusters file appears to cause a bug with parsing. Catch this error.
+track name="/arrayCp1/lmartin/CLIP/results/ddx3mutv2/ddx3mutv2_allreads.mergedRT_CLIP_clusters" visibility=2 colorByStrand="0,0,0 0,0,0"
+(6) If there is a problem parsing clusters from CLIPper, consider the version used.
+- The older version of CLIPper results <name>_<clusterNum>_<readPerCluster>
+- The newer version has name.val__<clusterNum>_<readPerCluster>
