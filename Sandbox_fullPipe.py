@@ -233,6 +233,7 @@ def runBowtie(fastqFiles,index,index_tag):
         print "Problem with mapping."
 
 print "Run mapping to repeat index."  
+trimmedReads5p=glob.glob(outfilepath+"*5ptrimmed.fastq")
 mappedReads_rep,unmappedReads_rep=runBowtie(trimmedReads5p,repeat_index,'repeat')
 
 # <codecell>
@@ -672,12 +673,6 @@ def countHitsPerGene(bf):
     geneCounts.sort(ascending=False)
     return geneCounts
 
-def sortFilteredBed(bedFile):
-    bf=pd.DataFrame(pd.read_table(bedFile,header=None))
-    bf.columns=['Chr','Start','Stop','CLIPper_name','Q','Strand']
-    geneCounts=countHitsPerGene(bf)
-    return geneCounts
-
 def getSnoRNAreads(CLIPPERlowFDRcenters,snoRNAindex):
     program='intersectBed'		
     bedFile=outfilepath+'clipGenes_snoRNA_LowFDRreads.bed'
@@ -692,6 +687,12 @@ def countSnoRNAs(bedFile_sno):
     bf.columns=['Chr','Start','End','CLIPper_name','Q','Strand','Chr_snoRNA','Start_snoRNA','Stop_snoRNA','name_snoRNA','Type','strand_snoRNA']
     geneCounts=bf.groupby('name_snoRNA').size()
     geneCounts.sort(ascending=False)
+    return geneCounts
+
+def sortFilteredBed(bedFile):
+    bf=pd.DataFrame(pd.read_table(bedFile,header=None))
+    bf.columns=['Chr','Start','Stop','CLIPper_name','Q','Strand']
+    geneCounts=countHitsPerGene(bf)
     return geneCounts
 
 def countRemainingGeneTypes(remaining):
@@ -827,7 +828,7 @@ def makeTab(bedGraph,genesFile,sizesFile):
 def makeAvgGraph(bedGraph,utrFile,genesFile,sizesFile):
     # Usage: Generate a matrix of read itensity values across gene body.
     # Input: BedGraph.
-    # Output: Generates two matricies, which are passed into R.
+    # Output: Generates two matricies.
     program= os.getcwd() + '/bin/averageGraph_scaled_tab.pl'
     program2 = 'wait'
     tabFile=makeTab(bedGraph,genesFile,sizesFile)
@@ -964,8 +965,9 @@ plot_ReadAccounting(outfilepath,sampleName)
 # <codecell>
 
 def plot_BoundGeneTypes(outfilepath,sampleName):
-    record=pd.DataFrame()
-    geneListToPlot=glob.glob(outfilepath+'PlotData_ReadsPerGene_*')
+    record=pd.DataFrame()   
+    # Exclude specific files (e.g., UTR-specific reads).
+    geneListToPlot=[f for f in glob.glob(outfilepath+'PlotData_ReadsPerGene_*') if '5pUTR' not in f and '3pUTR' not in f and 'CDS' not in f]
     for boundGenes in geneListToPlot:
         glist=pd.read_csv(boundGenes,header=None)
         glist.columns=['GeneName','Count']
@@ -1011,7 +1013,8 @@ def plot_ReadsPerCluster(outfilepath,sampleName):
     plt.xlabel('Reads per cluster (bin=%s)'%interval,fontsize=5)
     plt.ylabel('Frequency (RT stop count)',fontsize=5)
     plt.title('Reads per cluster',fontsize=5)
-    plt.xlim(-interval,np.max(center)+interval)
+    plt.xlim(0,100) # Make the histogram easy to view.
+    # plt.xlim(-interval,np.max(center)+interval)
     
 plt.subplot(2,3,2)
 plot_ReadsPerCluster(outfilepath,sampleName)
@@ -1048,7 +1051,6 @@ def plot_clusterBindingIntensity(outfilepath,sampleName):
     p=plt.pcolormesh(np.array(hmap_vals),cmap='Blues')
     plt.tick_params(axis='x',labelbottom='off') 
     plt.xlabel('Cluster position',fontsize=5)
-    plt.ylim(0,ylimit)
     locs,pltlabels = plt.yticks(fontsize=5)
     plt.ylabel('Cluster number',fontsize=5)
     plt.title('Read distribution',fontsize=5)
@@ -1128,7 +1130,7 @@ def convertENBLids(enst_name):
     ensg_name=ensemblGeneAnnot.loc[enst_name,'name2']
     return ensg_name
 
-def getUTRbindingProfile(utr):
+def getUTRbindingProfile(utr,hmap_m):
     if utr=='5p':
         ix=(hmap_m[range(201,601)].sum(axis=1)==0)&(hmap_m[range(1,201)].sum(axis=1)>0)
         screen=readUTRfile(outfilepath+'/PlotData_ReadsPerGene_5pUTR')
@@ -1151,8 +1153,6 @@ def plot_geneBodyPartition(outfilepath,sampleName):
     hmap=pd.DataFrame(pd.read_table(treatMatrix,header=None,skiprows=1))
     
     # Ensure genes recoverd from this analysis are indepdently indentified using partitioning of CLIPper cluster data.
-    ensemblGeneAnnot=pd.DataFrame(pd.read_table(genesFile))
-    ensemblGeneAnnot=ensemblGeneAnnot.set_index('name') # Make ENST the index
     hmap['ENSG_ID']=hmap.ix[:,0].apply(convertENBLids)
     bound_pc = outfilepath+'clipGenes_proteinCoding'
     pc_genes=pd.DataFrame(pd.read_table(bound_pc,header=None,))
@@ -1166,9 +1166,9 @@ def plot_geneBodyPartition(outfilepath,sampleName):
     
     # UTR specific genes.
     geneTypes=['5p','cds','3p'] 
-    depth=10
+    depth=50
     for i in range(0,3):    
-        utrMatrix=getUTRbindingProfile(geneTypes[i])
+        utrMatrix=getUTRbindingProfile(geneTypes[i],hmap_m)
         tosave=outfilepath+'PlotData_ExclusiveBound_%s'%geneTypes[i] 
         np.savetxt(tosave,utrMatrix['ENSG_ID'],fmt="%s")
         plt.subplot2grid((2,3),(1,i),colspan=1)
@@ -1184,7 +1184,9 @@ def plot_geneBodyPartition(outfilepath,sampleName):
         plt.xticks(visible=False)
         plt.yticks(visible=False)
         plt.title('%s specific genes: %s'%(geneTypes[i],np.unique(utrMatrix['ENSG_ID']).shape[0]),fontsize=5)
-        
+ 
+ensemblGeneAnnot=pd.DataFrame(pd.read_table(genesFile))
+ensemblGeneAnnot=ensemblGeneAnnot.set_index('name') # Make ENST the index
 plot_geneBodyPartition(outfilepath,sampleName)
 
 # <codecell>
@@ -1275,6 +1277,7 @@ def plot_rDNA(outfilepath,sampleName):
     plt.xlim(start,end)       
     
     # Features of rDNA with respect to start of the bowtie index (index=0)
+    rRNAstart=start
     plt.axvspan(start18s+rRNAstart,end18s+rRNAstart,facecolor='g',alpha=0.5)
     plt.axvspan(start5s+rRNAstart,end5s+rRNAstart,facecolor='r',alpha=0.5)
     plt.axvspan(start28s+rRNAstart,end28s+rRNAstart,facecolor='b',alpha=0.5)
@@ -1340,7 +1343,7 @@ def getBindingFrac(type_specific):
     pos_data=type_specific[type_specific['strand_snoRNA']=='+']
     pos_data['diff']=np.abs(pos_data['Start_snoRNA']-pos_data['Start'])
     pos_data['frac']=pos_data['diff']/(pos_data['Stop_snoRNA']-pos_data['Start_snoRNA'])
-    DF_snoProfile=pd.concat([DF_neg,DF_pos])
+    DF_snoProfile=pd.concat([neg_data,pos_data])
     return DF_snoProfile
 
 print "snoRNA gene body anaysis."
@@ -1373,8 +1376,8 @@ for sType in set(bf_sno['Type']):
         title="scaRNA"
     plt.subplot(2,2,i)
     bins=np.arange(0,1,0.01)
-    hist,bins=np.histogram(DF_snoProfile['frac'],bins=bins)
-    hist=np.array(hist/float(DF_snoProfile['frac'].shape[0]),dtype=float)
+    hist,bins=np.histogram(sno_profile['frac'],bins=bins)
+    hist=np.array(hist/float(sno_profile['frac'].shape[0]),dtype=float)
     width=0.7*(bins[1]-bins[0])
     center=(bins[:-1] + bins[1:])/2
     plt.bar(center,hist,align='center',width=width,color='blue',alpha=0.75)
@@ -1399,11 +1402,12 @@ def getncRNABindingFrac(type_specific):
     pos_data=type_specific[type_specific['Strand']=='+']
     pos_data['diff']=np.abs(pos_data['Gene Start (bp)']-pos_data['RT_stop'])
     pos_data['frac']=pos_data['diff']/(pos_data['Gene End (bp)']-pos_data['Gene Start (bp)'])
-    DF_ncRNAProfile=pd.concat([DF_neg,DF_pos])
+    DF_ncRNAProfile=pd.concat([neg_data,pos_data])
     return DF_ncRNAProfile
 
 print "ncRNA gene body anaysis."
 st_stopFiles=glob.glob(outfilepath+"*.geneStartStop")
+st_stopFiles=[f for f in st_stopFiles if 'rRNA' not in f]
 fig6=plt.figure(6)
 plotDim=math.ceil(math.sqrt(len(st_stopFiles)))
 i=1
@@ -1431,4 +1435,7 @@ fig6.savefig(outfilepath+'Figure6.pdf',format='pdf',bbox_inches='tight',dpi=150,
 # <codecell>
 
 logOpen.close()
+
+# <codecell>
+
 
