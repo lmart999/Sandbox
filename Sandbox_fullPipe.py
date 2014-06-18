@@ -233,7 +233,6 @@ def runBowtie(fastqFiles,index,index_tag):
         print "Problem with mapping."
 
 print "Run mapping to repeat index."  
-trimmedReads5p=glob.glob(outfilepath+"*5ptrimmed.fastq")
 mappedReads_rep,unmappedReads_rep=runBowtie(trimmedReads5p,repeat_index,'repeat')
 
 # <codecell>
@@ -666,6 +665,12 @@ filteredLincRNACenters=filterSnoRNAs(getBedCenterPoints(lincRNAReads),snoRNAmask
 
 # <codecell>
 
+def sortFilteredBed(bedFile):
+    bf=pd.DataFrame(pd.read_table(bedFile,header=None))
+    bf.columns=['Chr','Start','Stop','CLIPper_name','Q','Strand']
+    geneCounts=countHitsPerGene(bf)
+    return geneCounts
+
 def countHitsPerGene(bf):
     # *** THIS MAY DEPEND UPON THE VERSION OF CLIPPER USED ***
     bf['geneName']=bf['CLIPper_name'].apply(lambda x: x.split('_')[0])
@@ -687,12 +692,6 @@ def countSnoRNAs(bedFile_sno):
     bf.columns=['Chr','Start','End','CLIPper_name','Q','Strand','Chr_snoRNA','Start_snoRNA','Stop_snoRNA','name_snoRNA','Type','strand_snoRNA']
     geneCounts=bf.groupby('name_snoRNA').size()
     geneCounts.sort(ascending=False)
-    return geneCounts
-
-def sortFilteredBed(bedFile):
-    bf=pd.DataFrame(pd.read_table(bedFile,header=None))
-    bf.columns=['Chr','Start','Stop','CLIPper_name','Q','Strand']
-    geneCounts=countHitsPerGene(bf)
     return geneCounts
 
 def countRemainingGeneTypes(remaining):
@@ -907,6 +906,19 @@ for ix in repeatAnnotDF.index:
     gene_hits['Repeat_Start']=repeatAnnotDF.loc[ix,'IndexStart']
     outfilepathToSave=outfilepath + '/PlotData_RepeatRNAreads_%s'%repName
     gene_hits.to_csv(outfilepathToSave)
+
+# <codecell>
+
+def makeRepeatAnnotation(repeatGenomeBuild,repeatAnnotation):
+    repeat_genome=np.genfromtxt(repeatGenomeBuild,dtype='string')
+    repeat_genome_bases=repeat_genome[1]
+    repeat_genome_size=len(repeat_genome[1])
+    repeatAnnotDF=pd.DataFrame(pd.read_table(repeatAnnotation,header=None))
+    repeatAnnotDF.columns=['Name','Length','IndexStart','IndexEnd']
+    repeatAnnotDF['End_for_extraction']=repeatAnnotDF['IndexEnd']+1 # Python list extraction is not end index inclusive; to extract sequence, use end + 1. 
+    return (repeat_genome_bases,repeatAnnotDF)
+
+repeat_genome_bases,repeatAnnotDF=makeRepeatAnnotation(repeatGenomeBuild,repeatAnnotation)
 
 # <codecell>
 
@@ -1347,7 +1359,7 @@ def getBindingFrac(type_specific):
     return DF_snoProfile
 
 print "snoRNA gene body anaysis."
-logOpen.write("Gene body analysis.\n")
+# logOpen.write("Gene body analysis.\n")
 bf_sno=pd.read_table(outfilepath+"clipGenes_snoRNA_LowFDRreads.bed",header=None)
 bf_sno.columns=['Chr','Start','End','CLIPper_name','Q','Strand','Chr_snoRNA','Start_snoRNA','Stop_snoRNA','name_snoRNA','Type','strand_snoRNA']
 snoTypes=pd.DataFrame(bf_sno.groupby('Type').size())
@@ -1355,6 +1367,11 @@ snoTypes.columns=['Reads']
 snoTypes['Fraction']=snoTypes['Reads']/snoTypes['Reads'].sum(axis=1)
 outfilepathToSave=outfilepath+'/PlotData_readsPerSnoRNAType'
 snoTypes.to_csv(outfilepathToSave)
+
+snoTypesAndGenes=pd.DataFrame(bf_sno.groupby(['Type','name_snoRNA']).size())
+snoTypesAndGenes.columns=['Count_per_gene']
+outfilepathToSave=outfilepath+'/PlotData_geneStatsPerSnoRNAType'
+snoTypesAndGenes.to_csv(outfilepathToSave)
 
 fig5=plt.figure(5)
 ax=plt.subplot(2,2,1)
@@ -1368,12 +1385,17 @@ i=2
 for sType in set(bf_sno['Type']):
     type_specific=bf_sno[bf_sno['Type']==sType]
     sno_profile=getBindingFrac(type_specific)
+    
     if sType=='C':
-        title="C/D box"
+        title="C/D_box"
     elif sType=='H':
-        title="H/ACA box"
+        title="H/ACA_box"
     else:
         title="scaRNA"
+    
+    outfilepathToSave=outfilepath+'/PlotData_snoRNAReadDist_%s'%sType
+    sno_profile.to_csv(outfilepathToSave)
+    
     plt.subplot(2,2,i)
     bins=np.arange(0,1,0.01)
     hist,bins=np.histogram(sno_profile['frac'],bins=bins)
@@ -1385,6 +1407,7 @@ for sType in set(bf_sno['Type']):
     plt.tick_params(axis='y',labelsize=5)  
     plt.xlabel('Fraction of gene body (5p - 3p)',fontsize=5)
     plt.title('Binding profile for %s'%title,fontsize=5)
+    plt.xlim([0,1])
     i+=1
 
 fig5.tight_layout()
