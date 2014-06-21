@@ -518,8 +518,8 @@ def modCLIPPERout(CLIPPERin,CLIPPERout):
     h.close()
     CLIPPERlowFDR=CLIPperOutBed.replace('.bed','_lowFDRreads.bed')
     outfh=open(CLIPPERlowFDR,'w')
-    # Intersect input reads with the CLIPper windows and report full result for both.
-    proc=subprocess.Popen([program,'-a',CLIPPERin,'-b',CLIPperOutBed,'-wa','-wb','-s'],stdout=outfh)
+    # Intersect input reads with the CLIPper windows, report full result for both, include strand, do not duplicate reads from -a if they interset with multiple windows.
+    proc=subprocess.Popen([program,'-a',CLIPPERin,'-b',CLIPperOutBed,'-wa','-wb','-s','-u'],stdout=outfh)
     proc.communicate()
     outfh.close()
     return (CLIPPERlowFDR,CLIPpeReadsPerCluster,CLIPpeGeneList,CLIPperOutBed)
@@ -682,7 +682,7 @@ def getSnoRNAreads(CLIPPERlowFDRcenters,snoRNAindex):
     program='intersectBed'		
     bedFile=outfilepath+'clipGenes_snoRNA_LowFDRreads.bed'
     outfh=open(bedFile, 'w')
-    proc=subprocess.Popen([program,'-a',CLIPPERlowFDRcenters,'-b',snoRNAindex,'-s','-wa','-wb'],stdout=outfh)
+    proc=subprocess.Popen([program,'-a',CLIPPERlowFDRcenters,'-b',snoRNAindex,'-s','-wa','-wb','-u'],stdout=outfh)
     proc.communicate()
     outfh.close()	
     return bedFile
@@ -941,7 +941,7 @@ def plot_ReadAccounting(outfilepath,sampleName):
     readsMappedRepeatMask=[outfilepath+sampleName+'_R1_3ptrimmed_filter_nodupe_5ptrimmed_notMappedTorepeat_mappedTo%s_withDupes_noBlacklist_noRepeat.bed'%index_tag,outfilepath+sampleName+'_R2_3ptrimmed_filter_nodupe_5ptrimmed_notMappedTorepeat_mappedTo%s_withDupes_noBlacklist_noRepeat.bed'%index_tag]
     clipperIN=outfilepath+sampleName+'_threshold=%s_%s_allreads.mergedRT_CLIPPERin.bed'%(threshold,index_tag)
     clipperOUT=outfilepath+sampleName+'_threshold=%s_%s_allreads.mergedRT_CLIP_clusters_lowFDRreads.bed'%(threshold,index_tag)
-    fileNames=['Raw (R1)','Raw (R2)','3p Trim (R1)','3p Trim (R2)','Filter (R1)','Filter (R2)','No dupes (R1)','No dupes (R2)','RepeatMapped(R1)','RepeatMaped(R2)','Hg19Mapped (R1)','Hg19Mapped(R2)','Blacklist (R1)','Blacklist (R2)','RepeatMask(R1)','RepeatMask(R2)','ClipperIn','ClipperOut']
+    fileNames=['Raw (R1)','Raw (R2)','3p Trim (R1)','3p Trim (R2)','Filter (R1)','Filter (R2)','No dupes (R1)','No dupes (R2)','RepeatMapped (R1)','RepeatMaped (R2)','Hg19Mapped (R1)','Hg19Mapped (R2)','Blacklist (R1)','Blacklist (R2)','RepeatMask (R1)','RepeatMask (R2)','ClipperIn','ClipperOut']
     filesToCount=[rawRead1,rawRead2,reads3pTrim[0],reads3pTrim[1],readsFilter[0],readsFilter[1],readsNoDupes[0],readsNoDupes[1],readsMappedReapeat[0],readsMappedReapeat[1],readsMappedHg19[0],readsMappedHg19[1],readsMappedBlacklist[0],readsMappedBlacklist[1],readsMappedRepeatMask[0],readsMappedRepeatMask[1],clipperIN,clipperOUT]
     
     counts=[]
@@ -1286,8 +1286,18 @@ def plot_rDNA(outfilepath,sampleName):
     plt.tick_params(axis='x',labelsize=2.5) 
     plt.tick_params(axis='y',labelsize=2.5)  
     plt.title('RT stops for %s: %s'%(name,len(RTpositions)),fontsize=5)
-    plt.xlim(start,end)       
-    
+    plt.xlim(start,end)  
+    # Record data
+    storageDF=pd.DataFrame()
+    sequence=repeat_genome_bases[start:end+1]
+    storageDF['Sequence']=pd.Series(list(sequence))
+    readsPerBase=np.array(list(hist))
+    readsPerBaseNorm=np.array(list(histPlot))
+    storageDF['RT_stops']=readsPerBase
+    storageDF['RT_stops_norm']=readsPerBaseNorm              
+    outfilepathToSave=outfilepath +'/PlotData_RepeatRNAHist_%s'%name
+    storageDF.to_csv(outfilepathToSave)
+
     # Features of rDNA with respect to start of the bowtie index (index=0)
     rRNAstart=start
     plt.axvspan(start18s+rRNAstart,end18s+rRNAstart,facecolor='g',alpha=0.5)
@@ -1408,6 +1418,14 @@ for sType in set(bf_sno['Type']):
     plt.xlabel('Fraction of gene body (5p - 3p)',fontsize=5)
     plt.title('Binding profile for %s'%title,fontsize=5)
     plt.xlim([0,1])
+    
+    # Record data
+    storageDF=pd.DataFrame()
+    storageDF['bins']=pd.Series(bins)
+    storageDF['hist']=pd.Series(hist)
+    outfilepathToSave=outfilepath+'/PlotData_snoRNAhistogram_%s'%sType
+    storageDF.to_csv(outfilepathToSave)
+    
     i+=1
 
 fig5.tight_layout()
