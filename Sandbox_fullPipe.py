@@ -76,6 +76,7 @@ utrFile=os.getcwd()+'/docs/hg19_ensembl_UTR_annotation.txt' # UTR annotation fil
 genesFile=os.getcwd()+'/docs/hg19_ensembl_genes.txt' # Gene annotation file.
 sizesFile=os.getcwd()+'/docs/hg19.sizes' # Genome sizes file. 
 snoRNAindex=os.getcwd()+'/docs/snoRNA_reference/sno_coordinates_hg19_formatted.bed' # snoRNA coordinate file.
+CLIPPERoutNameDelim='_' # Delimiter that for splitting gene name in the CLIPper windows file.
 
 # <codecell>
 
@@ -489,6 +490,20 @@ def runCLIPPER(RTclusterfile,genome,genomeFile):
     
     return (CLIPPERin,CLIPPERout)
 
+def makeGeneNameDict(fi):
+    # Usage: Make a dictionary that maps RT stop to gene name.
+    # Input: File path to intersected CLIPper windows and input RT stop coordinates.
+    # Output Dictionary mapping RT stop to name.
+    nameDict={}
+    with open(fi, 'r') as infile:
+        for read in infile:
+            elementList=read.strip().split('\t')
+            RT_id='_'.join((elementList[0],elementList[1],elementList[2],elementList[5]))
+            if RT_id not in nameDict:
+                geneName=elementList[9].strip().split(CLIPPERoutNameDelim)[0]
+                nameDict[RT_id]=geneName
+    return nameDict
+
 def modCLIPPERout(CLIPPERin,CLIPPERout):
     # Usage: Process the CLIPper output and isolate lowFDR reads based upon CLIPper windows.
     # Input: .bed file passed into CLIPper and the CLIPper windows file.
@@ -503,11 +518,13 @@ def modCLIPPERout(CLIPPERin,CLIPPERout):
     with open(CLIPPERout,'r') as infile:
         for line in infile:	
             try:
-                # *** Old CLIPper includes a header that cannot be parsed. Handle this. ***
-                # *** Old CLIPper: Ensembl genes are parsed with <name>_<cluster>_<count>. ***
+                # Note that different versions on CLIPper will report the gene name differently. So, we must handle this.
                 chrom,start,end,name,stats,strand,start_2,end_2 = line.strip().split('\t')
-                readPerCluster=name.strip().split('_')[2]
-                geneName=name.strip().split('_')[0]
+                if CLIPPERoutNameDelim=='_':
+                    readPerCluster=name.strip().split(CLIPPERoutNameDelim)[2]
+                else: 
+                    readPerCluster=(name.strip().split(CLIPPERoutNameDelim)[1]).split('_')[2]
+                geneName=name.strip().split(CLIPPERoutNameDelim)[0]
                 f.write('\t'.join((chrom,start,end,name,stats,strand))+'\n')
                 g.write((readPerCluster+'\n'))
                 h.write((geneName+'\n'))
@@ -516,12 +533,38 @@ def modCLIPPERout(CLIPPERin,CLIPPERout):
     f.close()
     g.close()
     h.close()
-    CLIPPERlowFDR=CLIPperOutBed.replace('.bed','_lowFDRreads.bed')
-    outfh=open(CLIPPERlowFDR,'w')
+    
     # Intersect input reads with the CLIPper windows, report full result for both, include strand, do not duplicate reads from -a if they interset with multiple windows.
-    proc=subprocess.Popen([program,'-a',CLIPPERin,'-b',CLIPperOutBed,'-wa','-wb','-s','-u'],stdout=outfh)
+    clusterWindowInt=CLIPperOutBed.replace('.bed','_fullClusterWindow.bed')
+    outfh=open(clusterWindowInt,'w')
+    proc=subprocess.Popen([program,'-a',CLIPPERin,'-b',CLIPperOutBed,'-wa','-wb','-s'],stdout=outfh)
     proc.communicate()
     outfh.close()
+    
+    # Use the full window intersection to make a dictionary mapping RTstop to gene name.
+    nameDict=makeGeneNameDict(clusterWindowInt)
+    
+    # Intersect input reads with CLIPper windows, but only report one intersection per read (as reads can overlap with multiple windows).
+    clusterWindowIntUniq=CLIPperOutBed.replace('.bed','_oneIntPerRead.bed')
+    outfh=open(clusterWindowIntUniq,'w')
+    proc=subprocess.Popen([program,'-a',CLIPPERin,'-b',CLIPperOutBed,'-wa','-s','-u'],stdout=outfh)
+    proc.communicate()
+    outfh.close()
+    
+    # Process the uniquly intersected RT stops by adding gene name.
+    CLIPPERlowFDR=CLIPperOutBed.replace('.bed','_lowFDRreads.bed')
+    outfh=open(CLIPPERlowFDR,'w')
+    with open(clusterWindowIntUniq, 'r') as infile:
+        for read in infile:
+            #print read
+            bed=read.strip().split('\t')
+            #print bed
+            RT_id='_'.join((bed[0],bed[1],bed[2],bed[5]))
+            geneName=nameDict[RT_id]
+            outfh.write('\t'.join((bed[0],bed[1],bed[2],geneName,bed[4],bed[5],'\n')))
+    outfh.close()
+    infile.close()
+    
     return (CLIPPERlowFDR,CLIPpeReadsPerCluster,CLIPpeGeneList,CLIPperOutBed)
 
 print "Run CLIPper."
@@ -546,7 +589,7 @@ def getBedCenterPoints(inBed):
     with open(inBed, 'r') as infile:
         for line in infile:	
             elementList=line.strip().split('\t')
-            f.write('\t'.join((elementList[0],str(int(elementList[1])+expand),str(int(elementList[1])+expand+1),elementList[9],elementList[4],elementList[5],'\n')))
+            f.write('\t'.join((elementList[0],str(int(elementList[1])+expand),str(int(elementList[1])+expand+1),elementList[3],elementList[4],elementList[5],'\n')))
     f.close()
     return outBed
 
@@ -665,6 +708,10 @@ filteredLincRNACenters=filterSnoRNAs(getBedCenterPoints(lincRNAReads),snoRNAmask
 
 # <codecell>
 
+# --- # 
+
+# <codecell>
+
 def sortFilteredBed(bedFile):
     bf=pd.DataFrame(pd.read_table(bedFile,header=None))
     bf.columns=['Chr','Start','Stop','CLIPper_name','Q','Strand']
@@ -682,7 +729,7 @@ def getSnoRNAreads(CLIPPERlowFDRcenters,snoRNAindex):
     program='intersectBed'		
     bedFile=outfilepath+'clipGenes_snoRNA_LowFDRreads.bed'
     outfh=open(bedFile, 'w')
-    proc=subprocess.Popen([program,'-a',CLIPPERlowFDRcenters,'-b',snoRNAindex,'-s','-wa','-wb','-u'],stdout=outfh)
+    proc=subprocess.Popen([program,'-a',CLIPPERlowFDRcenters,'-b',snoRNAindex,'-s','-wa','-wb'],stdout=outfh)
     proc.communicate()
     outfh.close()	
     return bedFile
